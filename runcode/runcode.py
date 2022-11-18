@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Union, Optional
 import uuid
 import re
-from itertools import chain
+from .reserve_dict import ReserveDict
 
 
 # Regex to check if the last expression ends with a semicolon
@@ -45,98 +45,6 @@ def format_code_for_error_line_display(code: str, lineno: int):
     return "\n".join(lines_annotated)
 
 
-class DualDict(dict):
-    def __init__(self, mutable_dict, immutable_dict=None):
-        self.mutable_dict = mutable_dict
-        self.immutable_dict = {} if immutable_dict is None else immutable_dict
-        self.immutable_blacklist = set(mutable_dict)
-
-    def __setitem__(self, key, value):
-        self.mutable_dict.__setitem__(key, value)
-        if key in self.immutable_dict:
-            self.immutable_blacklist.add(key)
-
-    def __getitem__(self, key):
-        val = self.mutable_dict.get(
-            key,
-            not_found
-            if key in self.immutable_blacklist
-            else self.immutable_dict.get(key, not_found),
-        )
-        if val is not_found:
-            raise KeyError(key)
-
-        return val
-
-    def __iter__(self):
-        return chain(
-            iter(self.mutable_dict),
-            (i for i in self.immutable_dict if i not in self.immutable_blacklist),
-        )
-
-    # def __eq__(self, other):
-    #     if not isinstance(other, DualDict):
-    #         return NotImplemented
-    #     return (
-    #         self.mutable_dict == other.mutable_dict
-    #         and self.immutable_dict == other.immutable_dict
-    #         and self.immutable_blacklist == other.immutable_blacklist
-    #     )
-
-    # def __hash__(self):
-    #     return hash((self.mutable_dict, self.immutable_dict, self.immutable_blacklist))
-
-    ## Probably the most expensive operation
-    # def __len__(self):
-    #    return len(
-    #        set(self.mutable_dict).union(
-    #            set(self.immutable_dict).difference(self.immutable_blacklist)
-    #        )
-    #    )
-
-    def __repr__(self):
-        return f"{type(self).__name__}(mutable_dict={self.mutable_dict}, immutable_dict={self.immutable_dict}, immutable_blacklist={self.immutable_blacklist})"
-
-    def pop(self, key, default=not_found):
-        if (val := self.mutable_dict.pop(key, not_found)) is not not_found:
-            pass
-        elif (
-            key not in self.immutable_blacklist
-            and (val := self.immutable_dict.pop(key, not_found)) is not not_found
-        ):
-            pass
-
-        if val is not_found:
-            if default is not_found:
-                raise KeyError(key)
-            return default
-
-        return val
-
-    def __delitem__(self, key):
-        self.pop(key)
-
-    def get(self, key, default=None):
-        return self.mutable_dict.get(
-            key,
-            default
-            if key in self.immutable_blacklist
-            else self.immutable_dict.get(key, default),
-        )
-
-    def __contains__(self, key):
-        return key in self.mutable_dict or (
-            key not in self.immutable_blacklist and key in self.immutable_dict
-        )
-
-    def clear(self):
-        self.mutable_dict.clear()
-        self.immutable_blacklist.union(self.immutable_dict)
-
-    def update(self, **args):
-        for d in args:
-            self.mutable_dict.update(d)
-            self.immutable_blacklist.union(self.immutable_dict)
 
 
 def runcode(
