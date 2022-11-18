@@ -4,7 +4,9 @@ from textwrap import dedent
 import os
 import sys
 
-sys.path.insert(0, Path(__file__).resolve().parent)
+this_dir = Path(__file__).resolve().parent
+
+sys.path.insert(0, this_dir.parent.as_posix())
 from runcode import runcode
 
 
@@ -98,7 +100,19 @@ class Tests(unittest.TestCase):
                         """
                     ),
                     namespace := {},
-                    {"os:": os, "sys": sys},
+                    {"os": os, "sys": sys},
+                ),
+                sorted(namespace),
+            ),
+        )
+
+        self.assertEqual(
+            (None, []),
+            (
+                runcode(
+                    this_dir.parent.joinpath("runcode", "runcode.py").read_text(),
+                    namespace := {},
+                    {},
                 ),
                 sorted(namespace),
             ),

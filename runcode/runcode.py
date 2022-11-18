@@ -44,15 +44,17 @@ def format_code_for_error_line_display(code: str, lineno: int):
     )
     return "\n".join(lines_annotated)
 
-"""
-class DualDict(Mapping):
-    def __init__(self, mutable_dict, immutable_dict):
+
+class DualDict(dict):
+    def __init__(self, mutable_dict, immutable_dict=None):
         self.mutable_dict = mutable_dict
-        self.immutable_dict = immutable_dict
-        self.immutable_blacklist = set(immutable_dict)
+        self.immutable_dict = {} if immutable_dict is None else immutable_dict
+        self.immutable_blacklist = set(mutable_dict)
 
     def __setitem__(self, key, value):
-        self.immutable_dict.__setitem__(key, value)
+        self.mutable_dict.__setitem__(key, value)
+        if key in self.immutable_dict:
+            self.immutable_blacklist.add(key)
 
     def __getitem__(self, key):
         val = self.mutable_dict.get(
@@ -64,41 +66,51 @@ class DualDict(Mapping):
         if val is not_found:
             raise KeyError(key)
 
+        return val
+
     def __iter__(self):
         return chain(
             iter(self.mutable_dict),
-            (
-                i
-                for i in self.immutable_dict
-                if i not in self.mutable_dict and i not in self.immutable_blacklist
-            ),
+            (i for i in self.immutable_dict if i not in self.immutable_blacklist),
         )
 
-    # More expensive than a regular set
-    def __len__(self):
-        return len(
-            set(self.mutable_dict).union(
-                set(self.immutable_dict).difference(self.immutable_blacklist)
-            )
-        )
+    # def __eq__(self, other):
+    #     if not isinstance(other, DualDict):
+    #         return NotImplemented
+    #     return (
+    #         self.mutable_dict == other.mutable_dict
+    #         and self.immutable_dict == other.immutable_dict
+    #         and self.immutable_blacklist == other.immutable_blacklist
+    #     )
+
+    # def __hash__(self):
+    #     return hash((self.mutable_dict, self.immutable_dict, self.immutable_blacklist))
+
+    ## Probably the most expensive operation
+    # def __len__(self):
+    #    return len(
+    #        set(self.mutable_dict).union(
+    #            set(self.immutable_dict).difference(self.immutable_blacklist)
+    #        )
+    #    )
 
     def __repr__(self):
-        return f"{type(self).__name__}(immutable_dict={self.mutable_dict}, immutable_dict={self.immutable_dict}, immutable_blacklist={self.immutable_blacklist})"
+        return f"{type(self).__name__}(mutable_dict={self.mutable_dict}, immutable_dict={self.immutable_dict}, immutable_blacklist={self.immutable_blacklist})"
 
     def pop(self, key, default=not_found):
         if (val := self.mutable_dict.pop(key, not_found)) is not not_found:
             pass
-        elif key not in self.immutable_blacklist and (val := self.immutable_dict.pop(key, not_found)) is not not_found:
+        elif (
+            key not in self.immutable_blacklist
+            and (val := self.immutable_dict.pop(key, not_found)) is not not_found
+        ):
             pass
-        else:
-            raise KeyError(key)
 
         if val is not_found:
             if default is not_found:
                 raise KeyError(key)
             return default
 
-        self.immutable_blacklist.add(key)
         return val
 
     def __delitem__(self, key):
@@ -114,62 +126,17 @@ class DualDict(Mapping):
 
     def __contains__(self, key):
         return key in self.mutable_dict or (
-            key not in self.immutable_dict and key in self.immutable_blacklist
+            key not in self.immutable_blacklist and key in self.immutable_dict
         )
-
-    def __eq__(self, other):
-        if not isinstance(other, DualDict):
-            return NotImplemented
-
-        return self.mutable_dict == other.mutable_dict and self.immutable_dict == other.immutable_dict and self.immutable_blacklist == other.immutable_blacklist
-
-    def __hash__(self):
-        return hash((self.mutable_dict, self.immutable_dict, self.immutable_blacklist))
 
     def clear(self):
         self.mutable_dict.clear()
         self.immutable_blacklist.union(self.immutable_dict)
 
-    def update(self, *args, **kwargs):
-        self.mutable_dict.update(*args, **kwargs)
-"""
-
-class KeyChangeTrackerDict(dict):
-    """
-    A dict that tracks which keys have been tampered with
-    """
-
-    def __init__(self, *args, **kwargs):
-        self.set_history = set()
-        super().__init__(*args, **kwargs)
-
-    def __setitem__(self, key, *args, track_key=True, **kwargs) -> None:
-        if track_key:
-            self.set_history.add(key)
-        super().__setitem__(key, *args, **kwargs)
-
-    def __delitem__(self, key, *args, track_key=True, **kwargs) -> None:
-        if track_key:
-            self.set_history.discard(key)
-        return super().__delitem__(key, *args, **kwargs)  # noqa
-
-    def setdefault(self, key, *args, track_key=True, **kwargs) -> None:
-        if track_key:
-            self.set_history.add(key)
-        return super().setdefault(key, *args, **kwargs)
-
-    def update(self, d, *args, track_key=True, **kwargs) -> None:
-        if track_key:
-            self.set_history.update(d.keys())
-        return super().update(d, *args, **kwargs)  # noqa
-
-    def clear(self, track_key=True) -> None:
-        if track_key:
-            self.set_history.clear()
-        return super().clear()
-
-    def __repr__(self):
-        return f"KeyTrackingDict({super().__repr__()}, set_history={self.set_history})"
+    def update(self, **args):
+        for d in args:
+            self.mutable_dict.update(d)
+            self.immutable_blacklist.union(self.immutable_dict)
 
 
 def runcode(
@@ -200,9 +167,7 @@ def runcode(
 
     var_return = gen_sym("return")
 
-    ns_exec = KeyChangeTrackerDict({var_return: None})
-    ns_exec.update(ro_ns, track_key=False)
-    ns_exec.update(ns, track_key=False)
+    ns_exec = DualDict(ns, ro_ns)
 
     filename = f"<runcode-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}>"
 
@@ -243,29 +208,9 @@ def runcode(
             e.__notes__.append(format_code_for_error_line_display(code, lineno))
         raise
 
+    #print(ns_exec)
+
     # Clean up the namespace
     return_value = ns_exec.pop(var_return, None)
-
-    # Replace existing namespace entries with potential new ones
-    pops = []
-    for key in ns.keys():
-        if key == "__builtins__":
-            continue
-
-        val = ns_exec.pop(key, not_found)
-        if val is not_found:
-            pops.append(key)
-        else:
-            ns[key] = val
-
-    # Remove deleted entries
-    for key in pops:
-        ns.pop(key)
-
-    # Add newly created entries
-    for key in ns_exec.set_history:
-        val = ns_exec.pop(key, not_found)
-        if val is not not_found:
-            ns[key] = val
 
     return return_value
