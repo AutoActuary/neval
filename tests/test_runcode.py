@@ -6,16 +6,17 @@ import sys
 this_dir = Path(__file__).resolve().parent
 sys.path.insert(0, this_dir.parent.as_posix())
 
-from runcode import reserve_dict
+from runcode import flagged_dict
 from runcode import runcode
 
-ReserveDict = reserve_dict.ReserveDict
+FlaggedDict = flagged_dict.FlaggedDict
 
 
-class TestReserveDict(unittest.TestCase):
+class TestFlaggedDict(unittest.TestCase):
     def setUp(self) -> None:
-        self.d = ReserveDict.fromdicts(
-            {"a": 1, "b": 2, "c": 3}, {"c": 999, "d": 4, "e": 5, "f": 6}
+        self.d = FlaggedDict(
+            {"d": 4, "e": 5, "f": 6, "a": 1, "b": 2, "c": 3},
+            __flags__={"a": None, "b": None, "c": None},
         )
 
     def test_each_constructors(self):
@@ -26,7 +27,7 @@ class TestReserveDict(unittest.TestCase):
         self.assertEqual(self.d.get("a"), 1)
 
         self.assertEqual(
-            dict.fromkeys(["a", "b"], 2), ReserveDict.fromkeys(["a", "b"], 2)
+            dict.fromkeys(["a", "b"], 2), FlaggedDict.fromkeys(["a", "b"], 2)
         )
 
     def test_pops(self):
@@ -112,7 +113,7 @@ class TestReserveDict(unittest.TestCase):
         self.assertEqual(list(reversed(self.d)), ["c", "b", "a", "f", "e", "d"])
 
 
-class TestReserveDictExec(unittest.TestCase):
+class TestFlaggedDictExec(unittest.TestCase):
     def test_annotation(self):
         code = dedent(
             """
@@ -122,7 +123,7 @@ class TestReserveDictExec(unittest.TestCase):
             """
         )
         exec(code, {})
-        exec(code, ReserveDict())
+        exec(code, FlaggedDict())
 
 
 class TestRunCode(unittest.TestCase):
@@ -242,19 +243,93 @@ class TestRunCode(unittest.TestCase):
             ),
         )
 
-        """
         self.assertEqual(
-            (None, sorted([i for i in dir(reserve_dict) if not i.startswith("_")])),
+            (None, sorted([i for i in dir(flagged_dict) if not i.startswith("_")])),
             (
                 runcode(
-                    this_dir.parent.joinpath("runcode", "reserve_dict.py").read_text(),
+                    this_dir.parent.joinpath("runcode", "flagged_dict.py").read_text(),
                     namespace := {},
-                    {},
                 ),
                 sorted(namespace),
             ),
         )
-        """
+
+        # Do we want this to be true or not? For now it's False
+        self.assertEqual(
+            False,
+            runcode(
+                dedent(
+                    """
+                        name_main = False
+                        if __name__ == "__main__":
+                            name_main = True
+                        name_main
+                        """
+                ),
+                namespace := {},
+            ),
+        )
+
+        # Assign-and-return via walrus operator
+        self.assertEqual(
+            (1, {"a": 1}),
+            (runcode("(a := 1)", namespace := {}), namespace),
+        )
+
+    def test_errors(self):
+        code = dedent(
+            """\
+            a
+            b
+            c
+            d d d
+            e"""
+        )
+        #   File "<runcode-2b43d9fb0bb36723ba251724e7078a6a33f6fefd>", line 1
+        #     a = 1 b = 2
+        #           ^
+        # SyntaxError: invalid syntax
+        # ----> 1 a = 1 b = 2
+        #
+
+        self.assertRaisesRegex(
+            SyntaxError,
+            "invalid syntax",
+            lambda: runcode(code),
+        )
+
+        # test if python running this test is > 3.11
+        if sys.version_info >= (3, 11):
+            #
+            err = None
+            try:
+                runcode(code)
+            except SyntaxError as e:
+                err = e
+
+            self.assertEqual(
+                err.msg,
+                "invalid syntax",
+            )
+            self.assertEqual(
+                err.__notes__,
+                [
+                    dedent(
+                        """\
+                              1 a
+                              2 b
+                              3 c
+                        ----> 4 d d d
+                              5 e"""
+                    )
+                ],
+            )
+
+        self.assertRaisesRegex(
+            SyntaxError,
+            "division by zero",
+            lambda: runcode("1/0"),
+        )
 
 
 if __name__ == "__main__":

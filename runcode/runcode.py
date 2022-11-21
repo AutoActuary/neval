@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Union, Optional
 import uuid
 import re
-from .reserve_dict import ReserveDict
+from .flagged_dict import FlaggedDict
 
 
 # Regex to check if the last expression ends with a semicolon
@@ -46,7 +46,6 @@ def format_code_for_error_line_display(code: str, lineno: int):
 
 
 
-
 def runcode(
     code: Union[str, ast.Module],
     namespace: Optional[Union[SimpleNamespace, Mapping]] = None,
@@ -70,13 +69,14 @@ def runcode(
     get_namespace_mapping = (
         lambda x: {} if x is None else x if isinstance(x, Mapping) else x.__dict__
     )
-    ns = get_namespace_mapping(namespace)
-    ro_ns = get_namespace_mapping(readonly_namespace)
+    nspace = get_namespace_mapping(namespace)
+
+    remove_builtins_from_namespace = "__builtins__" not in nspace
+
+    ns_exec = FlaggedDict(nspace, __flags__=nspace)
+    ns_exec.update(get_namespace_mapping(readonly_namespace))
 
     var_return = gen_sym("return")
-
-    ns_exec = ReserveDict.fromdicts(ns, ro_ns)
-
     filename = f"<runcode-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}>"
 
     # Set up the AST node
@@ -111,12 +111,19 @@ def runcode(
                     code.splitlines(),
                     filename,
                 )
-
-            e.__notes__ = getattr(e, "__notes__", [])
-            e.__notes__.append(format_code_for_error_line_display(code, lineno))
+            if hasattr(e, "add_note"):
+                e.add_note(
+                    format_code_for_error_line_display(code, lineno)
+                )
         raise
+    finally:
+        return_value = ns_exec.pop(var_return, None)
+        if remove_builtins_from_namespace:
+            ns_exec.pop("__builtins__", None)
 
-    # Clean up the namespace
-    return_value = ns_exec.pop(var_return, None)
+        nspace.clear()
+
+        for key in ns_exec.flags:
+            nspace[key] = ns_exec[key]
 
     return return_value
