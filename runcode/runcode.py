@@ -75,7 +75,7 @@ def runcode(
 
     var_return = gen_sym("return")
 
-    ns_exec = DualDict(ns, ro_ns)
+    ns_exec = ReserveDict.fromdicts(ns, ro_ns)
 
     filename = f"<runcode-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}>"
 
@@ -115,8 +115,6 @@ def runcode(
             e.__notes__ = getattr(e, "__notes__", [])
             e.__notes__.append(format_code_for_error_line_display(code, lineno))
         raise
-
-    #print(ns_exec)
 
     # Clean up the namespace
     return_value = ns_exec.pop(var_return, None)

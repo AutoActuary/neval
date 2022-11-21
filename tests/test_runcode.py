@@ -7,6 +7,7 @@ this_dir = Path(__file__).resolve().parent
 sys.path.insert(0, this_dir.parent.as_posix())
 
 from runcode import reserve_dict
+from runcode import runcode
 
 ReserveDict = reserve_dict.ReserveDict
 
@@ -61,14 +62,12 @@ class TestReserveDict(unittest.TestCase):
 
         self.assertEqual({**self.d}.items(), self.d.items())
 
-        #test contains
+        # test contains
         self.assertTrue(("a", 1) in dict(**self.d).items())
         self.assertTrue(("a", 1) in self.d.items())
 
         # keys
-        self.assertEqual(
-            list(self.d.keys()), ["d", "e", "f", "a", "b", "c"]
-        )
+        self.assertEqual(list(self.d.keys()), ["d", "e", "f", "a", "b", "c"])
 
         self.assertEqual(len(self.d), 6)
 
@@ -78,16 +77,14 @@ class TestReserveDict(unittest.TestCase):
 
         self.assertIn("a", self.d.keys())
 
-        #values
-        self.assertEqual(
-            list(self.d.values()), [4, 5, 6, 1, 2, 3]
-        )
+        # values
+        self.assertEqual(list(self.d.values()), [4, 5, 6, 1, 2, 3])
 
         self.assertEqual(len(self.d.values()), 6)
 
         self.assertEqual(list({**self.d}.values()), list(self.d.values()))
 
-        #self.assertEqual({**self.d}.values(), self.d.values())
+        # self.assertEqual({**self.d}.values(), self.d.values())
 
         self.assertTrue(6 in self.d.values())
 
@@ -97,7 +94,9 @@ class TestReserveDict(unittest.TestCase):
 
     def test_update(self):
         self.d.update({"a": 999, "g": 999})
-        self.assertEqual(self.d, {"d": 4, "e": 5, "f": 6, "a": 999, "b": 2, "c": 3, "g": 999})
+        self.assertEqual(
+            self.d, {"d": 4, "e": 5, "f": 6, "a": 999, "b": 2, "c": 3, "g": 999}
+        )
 
     def test_delete(self):
         del self.d["a"]
@@ -113,10 +112,20 @@ class TestReserveDict(unittest.TestCase):
         self.assertEqual(list(reversed(self.d)), ["c", "b", "a", "f", "e", "d"])
 
 
+class TestReserveDictExec(unittest.TestCase):
+    def test_annotation(self):
+        code = dedent(
+            """
+            a = object()
+            class _:
+                def _(self, _=a): pass
+            """
+        )
+        exec(code, {})
+        exec(code, ReserveDict())
 
 
-'''
-class Tests(unittest.TestCase):
+class TestRunCode(unittest.TestCase):
     def test_assignment(self):
 
         self.assertEqual(2, runcode("1+1"))
@@ -194,6 +203,7 @@ class Tests(unittest.TestCase):
 
         import os
         import sys
+
         self.assertEqual(
             (None, ["mock_module_54f56"]),
             (
@@ -215,17 +225,37 @@ class Tests(unittest.TestCase):
         )
 
         self.assertEqual(
-            (None, []),
+            (None, ["Example", "example"]),
             (
                 runcode(
-                    this_dir.parent.joinpath("runcode", "runcode.py").read_text(),
+                    dedent(
+                        f"""
+                        Example = object()
+                        def example(a=Example):
+                            pass
+                        """
+                    ),
                     namespace := {},
                     {},
                 ),
                 sorted(namespace),
             ),
         )
-'''
+
+        """
+        self.assertEqual(
+            (None, sorted([i for i in dir(reserve_dict) if not i.startswith("_")])),
+            (
+                runcode(
+                    this_dir.parent.joinpath("runcode", "reserve_dict.py").read_text(),
+                    namespace := {},
+                    {},
+                ),
+                sorted(namespace),
+            ),
+        )
+        """
+
 
 if __name__ == "__main__":
     unittest.main()
