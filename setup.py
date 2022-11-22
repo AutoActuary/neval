@@ -19,7 +19,7 @@ setuptools.setup(
     ],
     python_requires=">=3.4",
     use_scm_version={
-        "write_to": "aa_py_autory/version.py",
+        "write_to": "runcode/version.py",
     },
     setup_requires=[
         "setuptools_scm",
