@@ -23,7 +23,7 @@ runcode_filename_cache = {}
 def runcode(
     code: Union[str, ast.Module],
     namespace: Optional[Union[SimpleNamespace, Mapping]] = None,
-    readonly_namespace: Optional[Union[SimpleNamespace, Mapping]] = None,
+    namespace_readonly: Optional[Union[SimpleNamespace, Mapping]] = None,
 ):
     """
     Execute Python code in a namespace and return the result of the last statement in the code.
@@ -32,7 +32,7 @@ def runcode(
         code (Union[str, ast.Module]): The code to execute.
         namespace (Union[SimpleNamespace, Mapping], optional): The namespace to execute
             the code in. Defaults to None.
-        readonly_namespace (Union[SimpleNamespace, Mapping], optional): The namespace to
+        namespace_readonly (Union[SimpleNamespace, Mapping], optional): The namespace to
             execute the code in. Defaults to None.
 
     Returns:
@@ -50,7 +50,7 @@ def runcode(
 
     # Combine the namespaces into one and flag the read/write ones
     ns_exec = FlaggedDict(nspace, __flags__=nspace)
-    ns_exec.update(get_namespace_mapping(readonly_namespace))
+    ns_exec.update(get_namespace_mapping(namespace_readonly))
 
     # Return the last statement to this unique variable
     var_return = gen_sym("return")

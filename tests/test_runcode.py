@@ -194,7 +194,7 @@ class TestRunCode(unittest.TestCase):
         )
 
         # Runcode does not use class definition scope when namespace (~locals) and
-        # readonly_namespace (~globals) are specified
+        # namespace_readonly (~globals) are specified
         self.assertEqual([1], runcode("a=[1];[i for i in a if a]"))
 
         self.assertEqual(
@@ -208,8 +208,8 @@ class TestRunCode(unittest.TestCase):
         self.assertEqual(
             (None, {"a": 0}),
             (
-                runcode("a=1;b=2;", {}, readonly_namespace := {"a": 0}),
-                readonly_namespace,
+                runcode("a=1;b=2;", {}, namespace_readonly := {"a": 0}),
+                namespace_readonly,
             ),
         )
 
