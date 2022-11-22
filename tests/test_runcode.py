@@ -151,6 +151,39 @@ class TestRunCode(unittest.TestCase):
             runcode("while True: break"),
         )
 
+    def test_return(self):
+        self.assertEqual(
+            # Do we want to return None or the function `f`?
+            None,
+            runcode("def f(): pass")
+        )
+
+        self.assertTrue(
+            callable(runcode("lambda:None"))
+        )
+
+        # unfortunately the `with` statement is the last statement and not the `1` expression
+        self.assertEqual(
+            None,
+            runcode(
+                dedent(
+                    """
+                    class w:
+                        def __enter__(self): pass
+                        def __exit__(self, *args): pass
+                            
+                    with w():
+                        1
+                    """
+                )
+            )
+        )
+
+        self.assertEqual(
+            None,
+            runcode("")
+        )
+
     def test_scoping(self):
 
         # Exec used class definition scope when globals and locals are specified
@@ -326,7 +359,7 @@ class TestRunCode(unittest.TestCase):
             )
 
         self.assertRaisesRegex(
-            SyntaxError,
+            ZeroDivisionError,
             "division by zero",
             lambda: runcode("1/0"),
         )
