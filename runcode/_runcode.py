@@ -1,51 +1,23 @@
 import ast
 import hashlib
 import linecache
+import tempfile
 from collections.abc import Mapping
 from contextlib import suppress
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Union, Optional
-import uuid
 import re
 from .flagged_dict import FlaggedDict
-from .monkeypath_linecache import monkeypatch_linecache
+from .util import (
+    gen_sym,
+    add_asignment_to_last_statement,
+    deepest_traceback,
+    format_code_for_error_line_display,
+)
 
-
-# Regex to check if code ends with a semicolon
-reg_semicol = re.compile(r".*;\s*$", re.DOTALL)
-
-not_found = object()
-
-
-def gen_sym(varname):
-    uuid_str = str(uuid.uuid4()).replace("-", "")
-    return f"__{varname}_{uuid_str}__"
-
-
-def add_asignment_to_last_statement(code: ast.Module, varname: str):
-    # If the last statement is not an Expression, don't do anything
-    if code.body and isinstance(code.body[-1], ast.Expr):
-
-        assign = ast.parse(f"{varname}=None").body[0]
-        last_expression = getattr(code.body[-1], "value", code.body[-1])
-
-        assign.value = last_expression
-        for attr in ("lineno", "col_offset", "end_lineno", "end_col_offset"):
-            setattr(assign, attr, getattr(code.body[-1], attr))
-
-        code.body[-1] = assign
-
-
-def format_code_for_error_line_display(code: str, lineno: int):
-    lineno = int(lineno)
-    strlineno = str(lineno)
-
-    lines = code.splitlines()
-    lines_annotated = [f"{i+1:7d} {line}" for i, line in enumerate(lines)]
-    lines_annotated[lineno - 1] = (
-        ("-") * (5 - len(strlineno)) + "> " + strlineno + " " + lines[lineno - 1]
-    )
-    return "\n".join(lines_annotated)
+reg_runcode_filename = re.compile(r"runcode-[0-9a-f]{40}")
+runcode_filename_cache = {}
 
 
 def runcode(
@@ -84,7 +56,11 @@ def runcode(
     var_return = gen_sym("return")
 
     # Create a fake traceback file to display the correct number of the error
-    filename = f"runcode-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}"
+    filename = Path(
+        tempfile.gettempdir(),
+        f"runcode-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}",
+    ).as_posix()
+    runcode_filename_cache[Path(filename).name] = filename
 
     # Set up the AST node
     runme = code
@@ -102,20 +78,35 @@ def runcode(
 
     # If an error occurs, display it properly
     except Exception as e:
-        # `SyntaxError` from `compile` is in higher traceback than errors from `exec`
+        lineno = None
+
+        # `SyntaxError` is special since it is thrown by `compile` and not `exec`
         if isinstance(e, SyntaxError):
             e.filename = filename
             lineno = e.lineno
-        else:
-            lineno = e.__traceback__.tb_next.tb_lineno
 
         # Inject fake file contents to traceback cache
         if isinstance(code, str):
             # Python 3.11 has new functionality to display traceback notes
             if hasattr(e, "add_note"):
-                e.add_note(format_code_for_error_line_display(code, lineno))
+                if lineno is None:
+                    if tb_last := deepest_traceback(e.__traceback__, filename):
+                        lineno = tb_last.tb_lineno
+                if lineno is not None:
+                    e.add_note(
+                        format_code_for_error_line_display(code, lineno, filename),
+                    )
 
-        monkeypatch_linecache(filename, code)
+        # Add content to temp in order for C to print the correct line number after Python teardown
+        if isinstance(code, str):
+            for fname in Path(tempfile.gettempdir()).glob("runcode-*"):
+                if (
+                    reg_runcode_filename.match(fname.name)
+                    and runcode_filename_cache.get(fname.name, None) is None
+                ):
+                    fname.unlink()
+
+            Path(filename).write_text(code)
 
         raise
 
