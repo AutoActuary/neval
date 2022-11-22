@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="runcode",
-    version="0.0.1",
+
     author="AutoActuary",
     description="Execute raw Python code in an isolated namespace",
     long_description=long_description,
@@ -18,5 +18,11 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.4",
+    use_scm_version={
+        "write_to": "aa_py_autory/version.py",
+    },
+    setup_requires=[
+        "setuptools_scm",
+    ],
     install_requires=[],
 )
