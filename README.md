@@ -1,4 +1,4 @@
-# runcode
+# neval — Namespaced code evaluator     
 
 This package provides an alternative scoping mechanism
 to the standard `exec` and `eval` functions for running raw Python code. 
@@ -28,24 +28,25 @@ exec("import os; (lambda: print(os.__name__))()", {}, {})
 
 ### Runcode's alternative evaluation
 
-The main difference is that `runcode` has two arguments called `namespace`
-(almost like `locals`) for reflecting scope changes and `namespace_readonly`
-(almost like `globals`) to additionally draw from. The main deviations are:
-- `namespace` is a `dict` or `SimpleNamespace` whose keys are read and written to reflect scope
-  changes
-- `namespace_readonly` is a `dict` or `SimpleNamespace` whose keys are only read, but not written
-- if the last statement in the code is an expression, the executed value is 
-      returned
+The main difference is that `neval` has two arguments called `namespace` 
+for reflecting scope changes (almost like `locals`) and `namespace_readonly`
+to additionally draw from (almost like `globals`). The main deviations are:
+- `namespace` is a `dict` or a `__dict__` attributed object whose keys are 
+      read and written to reflect scope changes
+- `namespace_readonly` is a `dict` or a `__dict__` attributed object whose
+      keys are only read, but not written
+- if the last statement in the code is an expression, the executed value of 
+      the expression is returned
 - if an error occurs, a temp file is generated in order for C interpreter to 
       provide a more informative error message (after Python teardown)
 - for Python >= 3.11 the traceback includes a printout of the code using the new 
      `add_note` feature, similarly to `ipython` 
 ```python
-  File "/temp/runcode-057d58343544b6d102cac201bdc11527a0224e87", line 3, in <module>
+  File "/temp/neval-057d58343544b6d102cac201bdc11527a0224e87", line 3, in <module>
     c = 4/0
         ~^~
 ZeroDivisionError: division by zero
-Error in runcode-057d58343544b6d102cac201bdc11527a0224e87:
+Error in neval-057d58343544b6d102cac201bdc11527a0224e87:
       1 a = 1
 ----> 3 b = 4/0
       4 c = 5
@@ -55,12 +56,12 @@ Error in runcode-057d58343544b6d102cac201bdc11527a0224e87:
 ### Examples
 
 ```python
-from runcode import runcode
+from neval import neval
 
-runcode("a = 1; b = 2; c = 3; d = 4; a + b + c + d")
+neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d")
 # ✓ 10
 
-runcode("a = 1; b = 2; c = 3; d = 4; a + b + c + d", ns:={})
+neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d", ns:={})
 # ✓ 10
 
 ns
@@ -69,14 +70,14 @@ ns
 import numpy as np
 from types import SimpleNamespace
 
-runcode("a = argmax(array([1,2,3,4,3,2,1])**2)", ns:=SimpleNamespace(), np)
+neval("a = argmax(array([1,2,3,4,3,2,1])**2)", ns:=SimpleNamespace(), np)
 
 ns.a
 # ✓ 3
 
 a,b,c = (1,2,3)
 
-runcode("d = a + b*2 + c*3", ns:=SimpleNamespace(), globals())
+neval("d = a + b*2 + c*3", ns:=SimpleNamespace(), globals())
 
 ns.d
 # ✓ 14
@@ -84,25 +85,25 @@ ns.d
 d
 # ✗ NameError: name 'd' is not defined
 
-runcode("d = a + b*2 + c*3", globals())
+neval("d = a + b*2 + c*3", globals())
 
 d
 # ✓ 14
 
 params = SimpleNamespace(a=1, b=2, c=3)
 
-runcode("d = a + b*2 + c*3", params)
+neval("d = a + b*2 + c*3", params)
 
 params
 # ✓ namespace(a=1, b=2, c=3, d=14)
 
-runcode("""\
+neval("""\
 a = 1 + 2
 this is incorrect
 b = a + 3
 """)
 # ✗ NameError: name 'this' is not defined
-#   Error in runcode-8efcb70d4b63817f9fd92f3b61eb5a7c0c45cfe9:
+#   Error in neval-8efcb70d4b63817f9fd92f3b61eb5a7c0c45cfe9:
 #         1 a = 1 + 2
 #   ----> 2 this is incorrect
 #         3 b = a + 3

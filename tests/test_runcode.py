@@ -6,8 +6,8 @@ import sys
 this_dir = Path(__file__).resolve().parent
 sys.path.insert(0, this_dir.parent.as_posix())
 
-from runcode import flagged_dict
-from runcode import runcode
+from neval import flagged_dict
+from neval import neval
 
 FlaggedDict = flagged_dict.FlaggedDict
 
@@ -20,15 +20,11 @@ class TestFlaggedDict(unittest.TestCase):
         )
 
     def test_each_constructors(self):
-        self.assertEqual(
-            dict(**self.d), {"d": 4, "e": 5, "f": 6, "a": 1, "b": 2, "c": 3}
-        )
+        self.assertEqual(dict(**self.d), {"d": 4, "e": 5, "f": 6, "a": 1, "b": 2, "c": 3})
 
         self.assertEqual(self.d.get("a"), 1)
 
-        self.assertEqual(
-            dict.fromkeys(["a", "b"], 2), FlaggedDict.fromkeys(["a", "b"], 2)
-        )
+        self.assertEqual(dict.fromkeys(["a", "b"], 2), FlaggedDict.fromkeys(["a", "b"], 2))
 
     def test_pops(self):
         self.assertEqual(self.d.pop("c"), 3)
@@ -95,9 +91,7 @@ class TestFlaggedDict(unittest.TestCase):
 
     def test_update(self):
         self.d.update({"a": 999, "g": 999})
-        self.assertEqual(
-            self.d, {"d": 4, "e": 5, "f": 6, "a": 999, "b": 2, "c": 3, "g": 999}
-        )
+        self.assertEqual(self.d, {"d": 4, "e": 5, "f": 6, "a": 999, "b": 2, "c": 3, "g": 999})
 
     def test_delete(self):
         del self.d["a"]
@@ -129,13 +123,13 @@ class TestFlaggedDictExec(unittest.TestCase):
 class TestRunCode(unittest.TestCase):
     def test_assignment(self):
 
-        self.assertEqual(2, runcode("1+1"))
+        self.assertEqual(2, neval("1+1"))
 
-        self.assertEqual(None, runcode("for i in range(10): i"))
+        self.assertEqual(None, neval("for i in range(10): i"))
 
         self.assertEqual(
             9,
-            runcode(
+            neval(
                 dedent(
                     """
                     for i in range(10):
@@ -148,24 +142,22 @@ class TestRunCode(unittest.TestCase):
 
         self.assertEqual(
             None,
-            runcode("while True: break"),
+            neval("while True: break"),
         )
 
     def test_return(self):
         self.assertEqual(
             # Do we want to return None or the function `f`?
             None,
-            runcode("def f(): pass")
+            neval("def f(): pass"),
         )
 
-        self.assertTrue(
-            callable(runcode("lambda:None"))
-        )
+        self.assertTrue(callable(neval("lambda:None")))
 
         # unfortunately the `with` statement is the last statement and not the `1` expression
         self.assertEqual(
             None,
-            runcode(
+            neval(
                 dedent(
                     """
                     class w:
@@ -176,13 +168,10 @@ class TestRunCode(unittest.TestCase):
                         1
                     """
                 )
-            )
+            ),
         )
 
-        self.assertEqual(
-            None,
-            runcode("")
-        )
+        self.assertEqual(None, neval(""))
 
     def test_scoping(self):
 
@@ -195,12 +184,12 @@ class TestRunCode(unittest.TestCase):
 
         # Runcode does not use class definition scope when namespace (~locals) and
         # namespace_readonly (~globals) are specified
-        self.assertEqual([1], runcode("a=[1];[i for i in a if a]"))
+        self.assertEqual([1], neval("a=[1];[i for i in a if a]"))
 
         self.assertEqual(
             (None, {"a": 1, "b": 2}),
             (
-                runcode("a=1;b=2;", namespace := {}, {"a": 0}),
+                neval("a=1;b=2;", namespace := {}, {"a": 0}),
                 namespace,
             ),
         )
@@ -208,7 +197,7 @@ class TestRunCode(unittest.TestCase):
         self.assertEqual(
             (None, {"a": 0}),
             (
-                runcode("a=1;b=2;", {}, namespace_readonly := {"a": 0}),
+                neval("a=1;b=2;", {}, namespace_readonly := {"a": 0}),
                 namespace_readonly,
             ),
         )
@@ -216,7 +205,7 @@ class TestRunCode(unittest.TestCase):
         self.assertEqual(
             (None, ["mock_module_54f56", "os", "sys"]),
             (
-                runcode(
+                neval(
                     dedent(
                         f"""
                         import sys
@@ -241,7 +230,7 @@ class TestRunCode(unittest.TestCase):
         self.assertEqual(
             (None, ["mock_module_54f56"]),
             (
-                runcode(
+                neval(
                     dedent(
                         f"""
                         sys.path.insert(
@@ -261,7 +250,7 @@ class TestRunCode(unittest.TestCase):
         self.assertEqual(
             (None, ["Example", "example"]),
             (
-                runcode(
+                neval(
                     dedent(
                         f"""
                         Example = object()
@@ -279,8 +268,8 @@ class TestRunCode(unittest.TestCase):
         self.assertEqual(
             (None, sorted([i for i in dir(flagged_dict) if not i.startswith("_")])),
             (
-                runcode(
-                    this_dir.parent.joinpath("runcode", "flagged_dict.py").read_text(),
+                neval(
+                    this_dir.parent.joinpath("neval", "flagged_dict.py").read_text(),
                     namespace := {},
                 ),
                 sorted(namespace),
@@ -290,7 +279,7 @@ class TestRunCode(unittest.TestCase):
         # Do we want this to be true or not? For now it's False
         self.assertEqual(
             False,
-            runcode(
+            neval(
                 dedent(
                     """
                         name_main = False
@@ -306,7 +295,7 @@ class TestRunCode(unittest.TestCase):
         # Assign-and-return via walrus operator
         self.assertEqual(
             (1, {"a": 1}),
-            (runcode("(a := 1)", namespace := {}), namespace),
+            (neval("(a := 1)", namespace := {}), namespace),
         )
 
     def test_errors(self):
@@ -318,7 +307,7 @@ class TestRunCode(unittest.TestCase):
             d d d
             e"""
         )
-        #   File "<runcode-2b43d9fb0bb36723ba251724e7078a6a33f6fefd>", line 1
+        #   File "<neval-2b43d9fb0bb36723ba251724e7078a6a33f6fefd>", line 1
         #     a = 1 b = 2
         #           ^
         # SyntaxError: invalid syntax
@@ -328,7 +317,7 @@ class TestRunCode(unittest.TestCase):
         self.assertRaisesRegex(
             SyntaxError,
             "invalid syntax",
-            lambda: runcode(code),
+            lambda: neval(code),
         )
 
         # test if python running this test is > 3.11
@@ -336,7 +325,7 @@ class TestRunCode(unittest.TestCase):
             #
             err = None
             try:
-                runcode(code)
+                neval(code)
             except SyntaxError as e:
                 err = e
 
@@ -361,7 +350,13 @@ class TestRunCode(unittest.TestCase):
         self.assertRaisesRegex(
             ZeroDivisionError,
             "division by zero",
-            lambda: runcode("1/0"),
+            lambda: neval("1/0"),
+        )
+
+        self.assertRaisesRegex(
+            ZeroDivisionError,
+            "division by zero",
+            lambda: neval("1/0", {}, {}, False),
         )
 
 

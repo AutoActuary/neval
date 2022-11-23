@@ -29,9 +29,7 @@ def format_code_for_error_line_display(code: str, lineno: int, filename: str):
 
     lines = code.splitlines()
     lines_annotated = [f"{i+1:7d} {line}" for i, line in enumerate(lines)]
-    lines_annotated[lineno - 1] = (
-        ("-") * (5 - len(strlineno)) + "> " + strlineno + " " + lines[lineno - 1]
-    )
+    lines_annotated[lineno - 1] = ("-") * (5 - len(strlineno)) + "> " + strlineno + " " + lines[lineno - 1]
     return "\n".join([f"Error in {Path(filename).name}:"] + lines_annotated)
 
 

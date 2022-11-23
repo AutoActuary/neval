@@ -4,9 +4,7 @@ from typing import Any, List, Iterable, Union
 
 
 class FlaggedDict(dict):
-    def __init__(
-        self, *args, __flags__: Union[List, Iterable] = None, **kwargs
-    ):  # noqa
+    def __init__(self, *args, __flags__: Union[List, Iterable] = None, **kwargs):  # noqa
         super().__init__(*args, **kwargs)
         self.flags = {key: None for key in __flags__} if __flags__ else {}
 

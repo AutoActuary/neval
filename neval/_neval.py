@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Union, Optional
+from typing import Union, Optional, Any
 import re
 from .flagged_dict import FlaggedDict
 from .util import (
@@ -16,33 +16,39 @@ from .util import (
     format_code_for_error_line_display,
 )
 
-reg_runcode_filename = re.compile(r"runcode-[0-9a-f]{40}")
-runcode_filename_cache = {}
+reg_neval_filename = re.compile(r"neval-[0-9a-f]{40}")
+neval_filename_cache = {}
 
 
-def runcode(
+def neval(
     code: Union[str, ast.Module],
-    namespace: Optional[Union[SimpleNamespace, Mapping]] = None,
-    namespace_readonly: Optional[Union[SimpleNamespace, Mapping]] = None,
-):
+    namespace: Optional[Union[Mapping, SimpleNamespace, Any]] = None,
+    namespace_readonly: Optional[Union[Mapping, SimpleNamespace, Any]] = None,
+    traceback_file_output: bool = True,
+) -> Any:
     """
     Execute Python code in a namespace and return the result of the last statement in the code.
 
     Args:
         code (Union[str, ast.Module]): The code to execute.
-        namespace (Union[SimpleNamespace, Mapping], optional): The namespace to execute
-            the code in. Defaults to None.
-        namespace_readonly (Union[SimpleNamespace, Mapping], optional): The namespace to
-            execute the code in. Defaults to None.
+        namespace (Union[Mapping, Any], optional): The namespace to execute the code in, this can either be a `dict` or
+            any object with a `__dict__` attribute such as `SimpleNamespace`. Defaults to `None`.
+        namespace_readonly (Union[Mapping, Any], optional): A namespace to execute the code in, this can
+            either be a `dict` or any object with a `__dict__` attribute such as `SimpleNamespace`. Defaults to `None`.
+        traceback_file_output (bool, optional): Option to dump the `code` string to a temporary file when an error
+            occurs in order for the Python stacktrace to print all relevant lines. Ideally this should be mocked in
+            memory, but it seems like there are some redundancies in the interpreter that doesn't make this process
+            easy. This might cause security issues. Defaults to `True`.
+
 
     Returns:
-        Any: The result of the last statement in the code. If that statement is not an
-            expression None is returned.
+        Any: The result of the last statement in the code. If that statement is not an expression None is returned.
 
     """
-    get_namespace_mapping = (
-        lambda x: {} if x is None else x if isinstance(x, Mapping) else x.__dict__
-    )
+
+    def get_namespace_mapping(x):
+        return {} if x is None else x if isinstance(x, Mapping) else x.__dict__
+
     nspace = get_namespace_mapping(namespace)
 
     # __builtins__ gets automatically injected by exec, remove it if it's not already there
@@ -57,10 +63,10 @@ def runcode(
 
     # Create a fake traceback file to display the correct number of the error
     filename = Path(
-        tempfile.gettempdir(),
-        f"runcode-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}",
+        tempfile.gettempdir() if traceback_file_output else "",
+        f"neval-{hashlib.sha1(str(code).encode('utf-8')).hexdigest()}",
     ).as_posix()
-    runcode_filename_cache[Path(filename).name] = filename
+    neval_filename_cache[Path(filename).name] = filename
 
     # Set up the AST node
     runme = code
@@ -98,12 +104,9 @@ def runcode(
                     )
 
         # Add content to temp in order for C to print the correct line number after Python teardown
-        if isinstance(code, str):
-            for fname in Path(tempfile.gettempdir()).glob("runcode-*"):
-                if (
-                    reg_runcode_filename.match(fname.name)
-                    and runcode_filename_cache.get(fname.name, None) is None
-                ):
+        if traceback_file_output and isinstance(code, str):
+            for fname in Path(tempfile.gettempdir()).glob("neval-*"):
+                if reg_neval_filename.match(fname.name) and fname.name not in neval_filename_cache:
                     fname.unlink()
 
             Path(filename).write_text(code)
