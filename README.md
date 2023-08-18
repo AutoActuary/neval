@@ -67,6 +67,8 @@ Error in neval-057d58343544b6d102cac201bdc11527a0224e87:
 
 ```python
 from neval import neval
+from types import SimpleNamespace
+import numpy
 
 neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d")
 # ✓ 10
@@ -77,9 +79,6 @@ neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d", ns)
 
 ns
 # ✓ {'a': 1, 'b': 2, 'c': 3, 'd': 4}
-
-import numpy
-from types import SimpleNamespace
 
 ns = SimpleNamespace()
 neval("a = argmax(array([1,2,3,4,3,2,1])**2)", ns, numpy)
