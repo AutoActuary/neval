@@ -1,15 +1,15 @@
-# neval — Namespaced code evaluator     
+# NEval — Namespaced Code Evaluator
 
 This package provides an alternative scoping mechanism
 to the standard `exec` and `eval` functions for running raw Python code. 
-The goal is to overcome the following behaviour of `exec`, as describe
+The goal is to overcome the following behavior of `exec`, as described
 in the [docs](https://docs.python.org/3/library/functions.html#exec): 
-> If exec gets two separate objects as globals and locals, the code will
+> If `exec` gets two separate objects as `globals` and `locals`, the code will
 > be executed as if it were embedded in a class definition.
 
-For instance, when you want to use `locals` as a _staging_ scope and 
-`globals` as an accessible backdrop, the executed code can quickly
-result in unexpected behaviour. For example:
+For instance, when you want to use `locals` as the mutable scope and 
+`globals` as additional lookup, the default `exec` and `eval` procedures
+result in unexpected behavior. For example:
 
 ```python
 # ✓ [1]
@@ -26,30 +26,40 @@ exec("import os; (lambda: print(os.__name__))()", {}, {})
 ```
  
 
-### Runcode's alternative evaluation
+### NEval's alternative evaluation
 
 The main difference is that `neval` has two arguments called `namespace` 
-for reflecting scope changes (almost like `locals`) and `namespace_readonly`
-to additionally draw from (almost like `globals`). The main deviations are:
-- `namespace` is a `dict` or a `__dict__` attributed object whose keys are 
-      read and written to reflect scope changes
-- `namespace_readonly` is a `dict` or a `__dict__` attributed object whose
-      keys are only read, but not written
-- if the last statement in the code is an expression, the executed value of 
-      the expression is returned
-- if an error occurs, a temp file is generated in order for C interpreter to 
-      provide a more informative error message (after Python teardown)
-- for Python >= 3.11 the traceback includes a printout of the code using the new 
-     `add_note` feature, similarly to `ipython` 
+and `namespace_readonly` instead of `locals` and `globals`. These are similar
+to `locals` and `globals` but with a slightly different implementation under 
+the hood to allow for deviations from `eval` and `exec`.
+
+Key features of `neval` include:
+- `namespace` is a `dict` or an object with a `__dict__` attribute. This object is  
+      read/write in order to reflect all scope changes happening during execution.
+      This is helpful in keeping track of pipelines with many side effects.
+- `namespace_readonly` is a `dict` or an object with a `__dict__` attribute. Note
+      that the dictionary is treated as read-only in the sense that no objects
+      will be added, no objects will be removed, and no objects will be replaced,
+      although objects can be accessed and mutated. A common use case to set this 
+      parameter as `globals()` to make use of global variables and imported modules
+      without changing the global state.
+- `neval` returns the value of the last section in your code. If the last section is
+      an expression, it will return the executed value, if its a statement (such as
+      assignments of function declarations) it will return `None`.
+- If an error occurs, a full traceback is generated along with a temporary code file
+      to facilitate the whole process.
+- For Python >= 3.11, the traceback also includes a full printout of the code by making
+     use of the new `Exception.add_note` feature. The aim is to mimic the helpful error
+     feedback of `ipython`.
 ```python
-  File "/temp/neval-057d58343544b6d102cac201bdc11527a0224e87", line 3, in <module>
+  File "/temp/neval-057d58343544b6d102cac201bdc11527a0224e87", line 2, in <module>
     c = 4/0
         ~^~
 ZeroDivisionError: division by zero
 Error in neval-057d58343544b6d102cac201bdc11527a0224e87:
       1 a = 1
-----> 3 b = 4/0
-      4 c = 5
+----> 2 b = 4/0
+      3 c = 5
 ```
 
 
@@ -61,23 +71,25 @@ from neval import neval
 neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d")
 # ✓ 10
 
-neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d", ns:={})
+ns = {}
+neval("a = 1; b = 2; c = 3; d = 4; a + b + c + d", ns)
 # ✓ 10
 
 ns
 # ✓ {'a': 1, 'b': 2, 'c': 3, 'd': 4}
 
-import numpy as np
+import numpy
 from types import SimpleNamespace
 
-neval("a = argmax(array([1,2,3,4,3,2,1])**2)", ns:=SimpleNamespace(), np)
+ns = SimpleNamespace()
+neval("a = argmax(array([1,2,3,4,3,2,1])**2)", ns, numpy)
 
 ns.a
 # ✓ 3
 
-a,b,c = (1,2,3)
-
-neval("d = a + b*2 + c*3", ns:=SimpleNamespace(), globals())
+ns = SimpleNamespace()
+a, b, c = 1, 2, 3
+neval("d = a + b*2 + c*3", ns, globals())
 
 ns.d
 # ✓ 14
