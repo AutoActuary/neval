@@ -127,3 +127,67 @@ def neval(
     linecache.cache.pop(filename, None)
 
     return return_value
+
+
+def neval_file(
+    filepath: Union[Path, str],
+    namespace: Optional[Union[Mapping, SimpleNamespace, Any]] = None,
+    namespace_readonly: Optional[Union[Mapping, SimpleNamespace, Any]] = None,
+) -> Any:
+    """
+    Execute Python code from a file in a namespace and return the result of the last statement in the file.
+
+    Args:
+        code (Union[str, ast.Module]): The file to load and execute.
+        namespace (Union[Mapping, Any], optional): The namespace to execute the code in, this can either be a `dict` or
+            any object with a `__dict__` attribute such as `SimpleNamespace`. Defaults to `None`.
+        namespace_readonly (Union[Mapping, Any], optional): A namespace to execute the code in, this can
+            either be a `dict` or any object with a `__dict__` attribute such as `SimpleNamespace`. Defaults to `None`.
+
+    Returns:
+        Any: The result of the last statement in the code. If that statement is not an expression None is returned.
+
+    """
+    filepath = Path(filepath).resolve()
+
+    def get_namespace_mapping(x):
+        return {} if x is None else x if isinstance(x, Mapping) else x.__dict__
+
+    nspace = get_namespace_mapping(namespace)
+
+    # __builtins__ gets automatically injected by exec, remove it if it's not already there
+    remove_builtins_from_namespace = "__builtins__" not in nspace
+
+    # Combine the namespaces into one and flag the read/write ones
+    ns_exec = FlaggedDict(nspace, __flags__=nspace)
+    ns_exec.update(get_namespace_mapping(namespace_readonly))
+
+    # Return the last statement to this unique variable
+    var_return = gen_sym("return")
+
+    # Set up the AST node
+    runme = Path(filepath).read_text()
+
+    # If a syntax error occurs, rather raise it at the exec line
+    with suppress(SyntaxError):
+        if not isinstance(runme, ast.AST):
+            runme = ast.parse(runme)
+
+        add_asignment_to_last_statement(runme, var_return)
+
+    # Execute the annotated AST node
+    try:
+        exec(compile(runme, str(filepath), "exec"), ns_exec)
+
+    # Even if an error occurs, ensure that mutated scope is reflected in the namespace
+    finally:
+        return_value = ns_exec.pop(var_return, None)
+        if remove_builtins_from_namespace:
+            ns_exec.pop("__builtins__", None)
+
+        nspace.clear()
+
+        for key in ns_exec.flags:
+            nspace[key] = ns_exec[key]
+
+    return return_value

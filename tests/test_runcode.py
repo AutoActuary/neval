@@ -2,12 +2,15 @@ import unittest
 from pathlib import Path
 from textwrap import dedent
 import sys
+import tempfile
+import os
+import io
 
 this_dir = Path(__file__).resolve().parent
 sys.path.insert(0, this_dir.parent.as_posix())
 
 from neval import flagged_dict
-from neval import neval
+from neval import neval, neval_file
 
 FlaggedDict = flagged_dict.FlaggedDict
 
@@ -358,6 +361,44 @@ class TestRunCode(unittest.TestCase):
             "division by zero",
             lambda: neval("1/0", {}, {}, False),
         )
+
+    def test_neval_assign(self):
+
+        namespace = {}
+        result = neval("x=10;x", namespace=namespace)
+
+        self.assertEqual(result, 10)
+        self.assertEqual(namespace["x"], 10)
+
+    def test_neval_file_assign(self):
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            temp_file = Path(temp_dir_str, "file.py")
+
+            temp_file.write_text("x=10;x")
+            namespace = {}
+            result = neval_file(temp_file, namespace=namespace)
+
+        self.assertEqual(result, 10)
+        self.assertEqual(namespace["x"], 10)
+
+    def test_neval_file_name_error(self):
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            temp_file = Path(temp_dir_str, "file.py")
+
+            temp_file.write_text("xie837k76rlp56nv")
+            namespace = {}
+
+            e = ""
+            try:
+                neval_file(temp_file, namespace=namespace)
+            except:
+                import traceback
+
+                e = str(traceback.format_exc())
+
+        got = "File" + e.split("File")[-1]
+        expect = f"""File "{temp_file}", line 1, in <module>\n    xie837k76rlp56nv\nNameError: name 'xie837k76rlp56nv' is not defined"""
+        self.assertEqual(got.strip(), expect.strip())
 
 
 if __name__ == "__main__":
